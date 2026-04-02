@@ -1,0 +1,193 @@
+---
+slug: euler-786-billiard
+date: Apr 2 2026
+author: aniketh
+name: "How I Spent a Weekend Watching a Ball Bounce (Project Euler #786)"
+excerpt: A billiard ball, a weird quadrilateral, lattice unfolding, and way too much number theory.
+keywords: math,project euler,number theory,billiards,geometry
+---
+
+## The Problem
+
+So [Project Euler #786](https://projecteuler.net/problem=786) gives you a billiard table. It's a nice kite with angles $120°$, $90°$, $60°$, $90°$ at corners $A$, $B$, $C$, $D$.
+
+Really simple problem statement honestly; You shoot a ball from corner $A$, it bounces around with perfect physics and you want it to come back to $A$. How many distinct paths can the ball take if it bounces at most $N$ times?
+
+To sanity check your work: with up to $10$ bounces, there are only $6$ valid paths. With $100$, there's $478$. A thousand gives you $45{,}790$.
+
+Y'all just need to find the number of valid paths when $N = 10^9$. Yeah. $10^9$.
+
+![Billiard traces showing ball paths on the quadrilateral table](/posts/euler-786/billiard-traces.png)
+
+## Why This One?
+
+The first Euler problem I ever solved was [#785](https://projecteuler.net/problem=785), the one right before this. It was a Diophantine equation problem; took me about $4$-$5$ hours. The high was insane when my name appeared on the leaderboard (&lt;$100$ solves in a week!) and naturally I looked at the next one.
+
+[#786](https://projecteuler.net/problem=786) was a completely different beast. I stared at it for a while and genuinely didn't know where to start.
+
+I eventually found a similar older problem after lots of digging on periodic trajectories (pre-ChatGPT and google was ass), [#202 (Laserbeam)](https://projecteuler.net/problem=202), which is also about counting reflections inside a geometric shape and I ended up solving that one first (you'll soon know why)
+
+## First Instinct
+
+My honest first thought was to simulate it. Just trace the ball and count the bounces, see if I could find any patterns for small $N$ (hoping to find some obscure pattern on OEIS to cheat my way onto the leaderboard)
+
+I wrote a quick script that does exactly that and check this out; drag the slider to the projected paths as you allow more bounces:
+
+<BilliardSimulator />
+
+All I got were beautiful patterns instead lol (surely I'm missing something; check how circles form beautifully with increasing $N$!)
+
+## What if we stop watching the ball?
+
+Try setting the slider to $2$. Look at the simplest path: it leaves $A$, hits two edges, and comes back.
+
+Now what if I were to trace each edge of trajectory in a mirror fashion? Take a look at the video below to understand. 
+
+<video autoPlay loop muted playsInline style={{width: '100%', borderRadius: '8px', margin: '1rem 0'}}>
+  <source src="/posts/euler-786/billiard-unfold.mp4" type="video/mp4" />
+</video>
+
+A straight line. Every bouncing path is a straight line if you unfold the billiard table enough times. Mind map the above with a larger billiard trajectory and you'd find that the setting is a **infinitesimal hexagonal lattice** when you keep reflecting the trajectory edges.
+
+The question now sounds different; we no longer care where the ball bounces. Stare at it a bit and it turns into "how many straight lines from the origin to lattice points cross at most $N$ cell boundaries?"
+
+A number theory problem in disguise. Heh. 
+
+## Where It Gets Hard
+
+We've narrowed it down to the right problem statement - a bit of observation leads us to three inferences:
+
+**1. Not every lattice point is corner $A$**: When you map out the plane with reflections, some points correspond to $A$, some to $B$, some to $C$, some to $D$. We've started at A so we only want the ones where the ball actually returns to $A$.
+
+**2. The path has to be "direct"**: If a straight line passes through another copy of $A$ on its way to the target, that means it's a shorter path; Think about it: the ball would've returned to $A$ earlier. So we need some way to filter these cases out.
+
+**3. Counting bounces from coordinates**: Playing around with the simulations a bit led me to an unproven hunch that the bounce count for a path to some target $A'$ in the lattice kept matching with the number of edges the straight line intersects in the lattice.
+
+
+## Piecing It Together
+
+The first useful thing I found was [Baxter & Umble's paper](https://arxiv.org/abs/math/0509292) on periodic billiard orbits in triangles along with a couple more similar papers on [connectedpapers.com](https://www.connectedpapers.com/main/34f03b3e8a4ec20176678be6a596f043daffac99/Periodic-Orbits-for-Billiards-on-an-Equilateral-Triangle/graph). It kinda unfolds what we're trying to do but for equilateral triangles instead (which [problem #202](https://projecteuler.net/problem=202) was about). I tried to adapt their approach to our hexagonal lattice but it didn't really line up with what I was thinking.
+
+The paper focused on developing a coordinate system for equilateral triangle lattice structure but you just tweak it a bit with some vector arithmetic and we have our own thing now. 
+
+For Inference 1, Say we represent each target as a point $(a, b)$ using two basis vectors $2 \cdot \overrightarrow{AB}$ and $2 \cdot \overrightarrow{AD}$. It is straightforward that not every $(a, b)$ gets us back to $A$. the tiling has 3 types of vertices ($A$, $B/D$ midpoints, $C$ centroid). 
+
+Revisiting our simulation of small cases, we find a nice and clean pattern (phew it wasn't a waste of effort): $(a, b)$ lands on $A$ when $a + b \equiv 0 \pmod{3}$. The rest land on $B/D$ midpoints ($a + b \equiv 1 \pmod{3}$) or on $C$ ($a + b \equiv 2 \pmod{3}$).
+
+Inference 2 is straightforward honestly; Coprime pairs. Basically $m$ and $n$ are coprime if the only positive integer that is a divisor of both of them is $1$. Straight from wikipedia.
+
+Inference 3 feels the hardest; and it is. We'll see why soon.
+
+### Counting edge crossings
+
+We've been dangling on inference 3 for a while; lets do it.
+
+**Lemma 1** (Crossing Lemma). *Let $\mathcal{F}$ be a family of parallel lines with spacing $s$. A segment whose projection onto the perpendicular direction has length $L$ crosses $\lfloor L/s \rfloor$ lines of $\mathcal{F}$.*
+
+In plain terms, a segment from the origin to $(p, q)$ crosses $|p|$ vertical grid lines because its $x$-coordinate goes from $0$ to $p$ and the grid spacing is $1$. We'll use this lemma repeatedly to get to our theorem.
+
+### Two kinds of edges
+
+When we unfold the billiard table, the tiling has two kinds of edges:
+
+![Two types of edges in the hexagonal tiling](/posts/euler-786/tiling-edges.png)
+
+The purple **hexagon edges** are copies of sides $AB$ and $AD$ from our original table. The teal **internal edges** are copies of sides $BC$ and $CD$. A straight line from the origin to $(a, b)$ crosses both kinds, and we count them separately.
+
+But why two kinds? If you observe closely, each equilateral triangle in the underlying triangular lattice is subdivided into $3$ copies of our quadrilateral $ABCD$. The vertex $A$ sits at a triangle vertex, $C$ at the centroid and $B$, $D$ at edge midpoints. The edges $BC$ and $CD$ (centroid to midpoint) lie along the triangular lattice lines. The edges $AB$ and $AD$ (vertex to midpoint) form the hexagonal boundaries around each $A$-vertex.
+
+### Part 1: Internal (triangle-grid) edges
+
+Let's take a look at the tiling diagram again. The internal edges (teal) lie along three directions; $BC$ and $CD$ segments connecting centroids to edge midpoints.
+
+**Definition 1.** Let $\vec{s} = \overrightarrow{AB} = (1, 0)$ and $\vec{t} = \overrightarrow{AD} = (-\tfrac{1}{2}, \tfrac{\sqrt{3}}{2})$, which sit at $120°$ to each other (the angle at $A$). The target point for lattice coordinates $(a, b)$ is:
+
+$$
+P = 2a\vec{s} + 2b\vec{t} = (2a - b,\; b\sqrt{3})
+$$
+
+We need actual numbers to work with so we drop our basis vectors into Cartesian coordinates. The $120°$ angle between $\vec{s}$ and $\vec{t}$ gives us $\vec{t}$'s components.
+
+**Proposition 1.** *The projections of $P$ onto the three perpendicular directions are:*
+
+$$
+P \cdot \hat{s} = 2a - b, \quad P \cdot \hat{t} = 2b - a, \quad P \cdot \widehat{(s+t)} = a + b
+$$
+
+*Proof.* Projection onto $\hat{s} = (1, 0)$: trivially $2a - b$. Onto $\hat{t} = (-\tfrac{1}{2}, \tfrac{\sqrt{3}}{2})$:
+
+$$
+(2a - b)\!\left(-\tfrac{1}{2}\right) + b\sqrt{3} \cdot \tfrac{\sqrt{3}}{2} = -a + \tfrac{b}{2} + \tfrac{3b}{2} = 2b - a
+$$
+
+Onto $\widehat{(s+t)} = (\tfrac{1}{2}, \tfrac{\sqrt{3}}{2})$:
+
+$$
+(2a - b)\!\left(\tfrac{1}{2}\right) + b\sqrt{3} \cdot \tfrac{\sqrt{3}}{2} = a - \tfrac{b}{2} + \tfrac{3b}{2} = a + b
+$$
+
+We’ve got three numbers: $2a - b$, $2b - a$, and $a + b$. Each one is basically “how far” our line from the origin to $P$ goes in one of the three perpendicular directions to the internal edges. These are exactly the $L$’s we need for the crossing lemma which are one for each edge direction. 
+
+**Lemma 2.** *The internal edges are spaced $3$ units apart in $(a, b)$ coordinates.*
+
+Take another look at the tiling diagram. Pick any $A$-vertex of your choice. The nearest other $A$-vertex is not the next cell over because there are 2 other cells (a $B/D$-type and a $C$-type) between them. So to reach from one $A$ to the next $A$ in any direction, you'll always cross exactly 3 cells. That's why the edge spacing is 3 in our coordinates.
+
+**Corollary 1.** *By Lemma 1 (projection $\div$ spacing), the number of internal edge crossings is:*
+
+$$
+\frac{|2a - b|}{3} + \frac{|2b - a|}{3} + \frac{a + b}{3}
+$$
+
+**Corollary 2** (Integrality). *These are integers whenever $a + b \equiv 0 \pmod{3}$, since $2a - b = 3a - (a+b)$ and $2b - a = 3b - (a+b)$ are both divisible by $3$.*
+
+
+### Part 2: Hexagon edges
+
+The hexagon edges (purple in the diagram) are the $AB$ and $AD$ segments. Same deal as the above; you've got three families, one per direction. But this is a bit tricky because unlike the internal edges which run across the entire plane as continuous lines, hexagon edges are **short segments** that only show up at certain spots.
+
+**Lemma 3.** *Hexagon edges parallel to $\vec{s}$ repeat with period $3$ in the $b$-coordinate. Similarly, those parallel to $\vec{t}$ repeat with period $3$ in the $a$-coordinate, and those parallel to $\vec{s} + \vec{t}$ repeat with period $3$ in $|a - b|$.*
+
+Part 1's internal edges were continuous lines running across the entire plane so dividing the projection by the spacing give us clean integer counts. But the hexagon edges are different since they're short segments that only exist around $A$-vertices. Since $A$-vertices sit $3$ cells apart, these segments show up every $3$ rows. But whether our line actually hits one depends on where exactly it crosses that row. Some rows it hits a hexagon edge, some rows it slips through the gap.
+
+
+**Corollary 3.** *By Lemma 1, the number of hexagon edge crossings is:*
+
+$$
+\left\lfloor \frac{a}{3} \right\rfloor + \left\lfloor \frac{b}{3} \right\rfloor + \left\lfloor \frac{|a - b|}{3} \right\rfloor
+$$
+
+The floor functions (instead of clean division like Part 1) are because not every row has a hexagon edge; they're discrete segments and aren't continuous lines.
+
+### Total bounce count
+
+**Theorem 1.** *The total number of bounces for a path to lattice point $(a, b)$ is:*
+
+$$
+\text{bounces}(a, b) = \underbrace{\frac{|2a-b|}{3} + \frac{|2b-a|}{3} + \frac{a+b}{3}}_{\text{internal edges}} + \underbrace{\left\lfloor\frac{a}{3}\right\rfloor + \left\lfloor\frac{b}{3}\right\rfloor + \left\lfloor\frac{|a-b|}{3}\right\rfloor}_{\text{hexagon edges}}
+$$
+
+## What's Next?
+
+Honestly I'd like to take a jab at other polygons. This problem is kinda well researched for Triangles and their derivatives (our quadrilateral was just 2 equilateral triangles stuck together) but I'm not entirely sure how it's going to work out with other stuff. 
+
+Squares and Rectangles feel straightforward, maybe there's some generalization to n-gon's since there's some lattice repeatability? Maybe I'll stop at this; hopefully there's a part 2 where I get to extend this. 
+
+Props to Axiom Math's APIs for verifying this! 
+
+## References
+
+[1] A. Baxter, R. Umble. "Periodic orbits of billiards on an equilateral triangle." *The American Mathematical Monthly*, 2008. https://arxiv.org/abs/math/0509292
+
+[2] "Euclid's orchard." *Wikipedia*. https://en.wikipedia.org/wiki/Euclid%27s_orchard
+
+[3] Project Euler. "Problem 786: Billiard." https://projecteuler.net/problem=786
+
+[4] Project Euler. "Problem 202: Laserbeam." https://projecteuler.net/problem=202
+
+### Additional reading
+
+[5] R. Becker. "Periodic billiard trajectories in isosceles right-angled triangles." 2013. https://arxiv.org/abs/1306.6702
+
+[6] R. Becker. "On the local theory of billiards in polygons." 2014. https://arxiv.org/abs/1405.1150
+
+[7] Connected papers graph for [1]. https://www.connectedpapers.com/main/34f03b3e8a4ec20176678be6a596f043daffac99/Periodic-Orbits-for-Billiards-on-an-Equilateral-Triangle/graph

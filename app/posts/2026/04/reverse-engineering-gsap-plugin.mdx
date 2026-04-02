@@ -1,0 +1,23 @@
+---
+slug: reverse-engineering-gsap-plugin
+date: Mar 25 2026
+author: aniketh
+name: "Reverse Engineering a $99 Animation Plugin"
+excerpt: How I deobfuscated a commercial GSAP plugin to build my first personal website in 2020.
+keywords: reverse engineering,javascript,gsap,deobfuscation,web development
+---
+
+It was 2020; bunch of my peers were hashing out crazy personal sites with bunch of cool animations and tricks. Naturally, I wanted to build my own stuff but web development wasn't my forte. Breaking it was. 
+
+I remember going through this [repo](https://github.com/christopherkade/awesome-dev-websites) and it didn't take long for me to realize this isn't for me lol. I tried to take a few apart and build something on top of them and that's where I came across GSAP plugins which enable these crazy animations.
+
+Putting it short; the plugins I'm interested in were all paid but for some reason were available for free on CodePen. How? I needed to know. Turns out they've nicely obfuscated this crazy logic where DRM kicks in if you're not using it from CodePen and had a time-bomb locking you out if you were to use it out of context.
+
+And you now obviously know what happened next if you've read so far :) Here's what I've ended up with: 
+
+**TODO:** I'll update this blog on how I did it; will strip out the logical aspects of it so I don't get DMCA'd later this month. See ya!
+
+<video autoPlay loop muted playsInline style={{width: '100%', borderRadius: '8px', margin: '1rem 0'}}>
+  <source src="/posts/old-site-scroll.mp4" type="video/mp4" />
+</video>
+
