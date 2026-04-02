@@ -24,20 +24,24 @@ export const meta: Route.MetaFunction = () => [
     content: "Technical deep dives, mostly. The occasional RE rabbit hole :)",
   },
   {
-    name: "og:title",
+    property: "og:title",
     content: "Aniketh's Blog",
   },
   {
-    name: "og:description",
+    property: "og:description",
     content: "Technical deep dives, mostly. The occasional RE rabbit hole :)",
   },
   {
-    name: "og:image",
-    content: "/opengraph-image.jpg",
+    property: "og:image",
+    content: "https://paraxor.dev/opengraph-image.jpg",
   },
   {
-    name: "og:url",
+    property: "og:url",
     content: "https://paraxor.dev",
+  },
+  {
+    property: "og:type",
+    content: "website",
   },
 ];
 

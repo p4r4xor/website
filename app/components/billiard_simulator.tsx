@@ -232,30 +232,36 @@ function draw(ctx: CanvasRenderingContext2D, maxBounces: number) {
 // ============ REACT COMPONENT ============
 
 export default function BilliardSimulator() {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [maxBounces, setMaxBounces] = useState(20);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const containerWidth = container.clientWidth;
+    const scale = Math.min(containerWidth / W, 1);
+    const drawW = Math.floor(W * scale);
+    const drawH = Math.floor(H * scale);
+
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    ctx.scale(dpr, dpr);
+    canvas.width = drawW * dpr;
+    canvas.height = drawH * dpr;
+    canvas.style.width = drawW + 'px';
+    canvas.style.height = drawH + 'px';
+    ctx.scale(dpr * scale, dpr * scale);
     draw(ctx, maxBounces);
   }, [maxBounces]);
 
   return (
-    <div className="flex flex-col items-center gap-3 my-6 not-prose">
+    <div ref={containerRef} className="flex flex-col items-center gap-3 my-6 not-prose w-full">
       <canvas
         ref={canvasRef}
-        width={W}
-        height={H}
-        className="rounded border border-neutral-800"
+        className="rounded border border-neutral-800 max-w-full"
       />
       <div className="flex items-center gap-3" style={{fontFamily: "'STIX Two Text', serif"}}>
         <span className="text-neutral-400 text-base italic">

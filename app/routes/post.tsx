@@ -29,31 +29,31 @@ export const meta: Route.MetaFunction = ({ data }) => {
       content: frontmatter["excerpt"],
     },
     {
-      name: "og:title",
+      property: "og:title",
       content: "paraxor.dev • " + frontmatter["name"],
     },
     {
-      name: "og:description",
+      property: "og:description",
       content: frontmatter["excerpt"],
     },
     {
-      name: "og:image",
+      property: "og:image",
       content: "/opengraph-image.jpg",
     },
     {
-      name: "og:url",
+      property: "og:url",
       content: "https://paraxor.dev/" + frontmatter["slug"],
     },
     {
-      name: "article:published_time",
+      property: "article:published_time",
       content: new Date(frontmatter["date"]).toISOString(),
     },
     {
-      name: "article:author",
+      property: "article:author",
       content: frontmatter["author"],
     },
     {
-      name: "article:tag",
+      property: "article:tag",
       content: frontmatter["keywords"],
     }
   ]
