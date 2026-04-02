@@ -1,28 +1,34 @@
-[nullpt.rs](https://nullpt.rs)
+# paraxor.dev
 
-# nullpt.rs
+Personal blog and website. Technical deep dives, mostly. The occasional RE rabbit hole :)
 
-Technical blog with ideas from various authors. 
+Built on [nullpt.rs](https://github.com/nullpt-rs/blog) blog template (CC BY-NC-SA 4.0).
 
-#### Creating a new post
+### Running locally
 
-Creating a post is fairly simple, you just need to create a mdx file `src/posts/<year>/<month number>/<post-name>.mdx` and start with this header:
+```bash
+pnpm install
+pnpm dev
+```
+
+### Deploying
+
+```bash
+pnpm build
+wrangler deploy --config build/server/wrangler.json
+```
+
+### Creating a new post
+
+Create an MDX file at `app/posts/<year>/<month>/<post-name>.mdx`:
 
 ```md
 ---
 slug: slug-for-the-post
-date: Aug 1 2023
-author: authorname
-name: Your Amazing Post Title
-excerpt: A beautiful summary of the blog post
-keywords: comma,separated,keyword,list
+date: Apr 2 2026
+author: aniketh
+name: Your Post Title
+excerpt: A summary of the blog post
+keywords: comma,separated,keywords
 ---
 ```
-
-And continue writing using [GitHub Flavored Markdown](https://github.github.com/gfm/) :)
-
-#### Special Thanks
-
-- [@alii](https://github.com/alii) for creating a lovely starting template that I further modified to fit my needs.
-- [@zebp](https://github.com/zebp) for migrating the blog to react-router v7.
-- All nullptrs authors for sharing their ideas
