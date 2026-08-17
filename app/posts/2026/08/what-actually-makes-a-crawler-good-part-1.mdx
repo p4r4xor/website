@@ -1,0 +1,182 @@
+---
+slug: what-actually-makes-a-crawler-good-part-1
+date: Aug 14 2026
+author: aniketh
+name: "What Actually Makes a Crawler Good: Part 1"
+---
+
+> Anyone can build a crawler.
+
+I'm not trying to downplay the amount of detail and effort that goes into building a large scale distributed crawler but I firmly believe what makes a crawler great (let's pivot from just being good) is everything built around it: what goes into the frontier, what gets picked next, how fast each site can be crawled (with resource constraints) and how much it costs to keep the whole thing running.
+
+My vision was to power search on whatever I've crawled so far (what good search looks like is a different ball game; more on that later) but there's a bunch of difficult questions to answer before I even go there.
+
+**Note:** The scale I'm talking about here is 5-10B pages crawled every day.
+
+### How do you "evaluate" a crawler? Meaning, can you have quantifiable metrics which tell so?
+
+Answering this is very difficult honestly; depends a lot on where we draw the line on what exactly are the responsibilities of a crawler + figuring out if such metrics let us evaluate what's good and what isn't. Start defining on what the crawler is built for.
+
+So rephrasing my quote:
+
+> Anyone can build a crawler, but at what cost?
+
+A crawler is one of those systems where the memory model, runtime, concurrency primitives and libraries of a programming language matter because all these boring implementation details eventually show up in your bill.
+
+And at the same time, a crawler is continuously deciding how to spend a finite crawl budget. What matters to us is how useful, complete and fresh the resulting data is, whether we got it when we needed it, and what it cost us to get there. All of this can be measured; but collapsing them into one universal crawler score probably doesn't make a lot of sense.
+
+### How do you decide what/when to crawl and what/when not to?
+
+Another difficult question. As the URL catalog grows over time, you'd eventually have a lot more URLs than what you can crawl at any given point. Some have never been crawled, some are waiting to be refreshed, and some may no longer be worth spending resources on. A decent part of the goal is to maximize the amount of good data being crawled. To do that, we first try to establish the right separation of concerns at each stage by answering the sub questions below:
+
+1. What makes one URL more valuable than another?
+2. What can we know about a URL before crawling it?
+3. When should a known page be crawled again?
+4. How should limited crawl capacity be divided?
+5. How do we make these decisions across billions of URLs?
+
+> What makes one URL more valuable than another?
+
+A few I can think of: Does the URL align with the kind of queries and entities we'd like to maintain (Business value, since we want to power search)? Is the URL likely to contain authoritative, relevant and fresh information (IR value)? Is it likely to be retrieved multiple times (IR value)? Does it add something missing or duplicate what is already present (Corpus value)? Can it be fetched, parsed, normalized, and connected to entities at a reasonable cost (Technical value)? Could it lead the crawler into an underrepresented part of the web (Exploration value)?
+
+These signals aren't disjoint per se, a fair example: a popular article is weighted well from a retrieval standpoint but probably adds nothing if there's like 50 duplicate copies of it. The better question to think around these lines would probably be how these signals are scored and if they influence each other over time.
+
+> What can we know about a URL before crawling it?
+
+Kinda depends on whether this is the first URL we've ever seen from a host or just another URL from a host we already crawl. For a completely unknown host, honestly not a lot IMO. We know the URL itself, where it was discovered, the anchor and text around it, how many other hosts link to it and whether those hosts have been useful in the past (I'm excluding URLs discovered from sitemaps, user queries to keep it simple). PageRank / TrustRank / Harmonic centrality are probably the most used ranking methods here though they're susceptible to a few problems:
+
+- A junk page can still be ranked decently if enough junk pages add to its authority. If an authoritative page links into that network, some of its score can flow through the rest of it.
+- You don't really validate whether these junk pages are related. A layer of fingerprinting on WHOIS details + same IP / hosting block / ASN can give us more context, though shared hosting and CDNs mean these signals aren't proof on their own.
+
+On the other hand, we know a lot more if the host has already been crawled to some extent. Say we've never seen a particular Crunchbase URL but have crawled thousands of other `/company/*` pages == crawler has some idea of what that path usually contains, how often those pages are useful, what they cost to fetch and whether they tend to produce more useful links.
+
+We're defining a set of URLs which we expect to behave similarly as a group $g$. A group could be based on the URL path, the sitemap it came from, where its links appear within a website, or the type of entity it represents. A new URL can start with what we know about its group and develop its own history later. In a real system, a URL may belong to several overlapping groups; we'll use one group at a time in the math below even though rules from several groups can apply to the same URL.
+
+A nice question on top of this: How do we learn whether an uncertain group is actually useful? We can start off pretty simple; just schedule a high-confidence URL normally and allot a small exploration budget to an uncertain host to see what it gives. How much capacity we should spend doing this is something we've answered further in the blog.
+
+> When should a known page be crawled again?
+
+This splits into two questions: Based on what we've learnt from previous crawls, when should we check the page again? And how long are we allowed to go without checking it? A bad page can change on every request because of ads or recommendations which add nothing to our index. On the other hand, a company page may change rarely but the change itself could be important enough that we'd still want to check it often.
+
+A fairly simple starting point would be to learn refresh cadence at the path level. A new Crunchbase `/company/*` page inherits what we know about similar company pages; if it keeps changing meaningfully, pull its next crawl closer and if it remains unchanged across multiple crawls, keep pushing it out.
+
+We can put some simple math around this: Say meaningful changes within a group happen at an estimated rate $\lambda_g$. If we start by assuming these changes follow a Poisson process, the probability that at least one meaningful change happened while we waited $\Delta t$ is:
+
+$$
+P(\text{at least one meaningful change in } \Delta t) = 1 - e^{-\lambda_g \Delta t}
+$$
+
+A page from a frequently changing group reaches a high probability quickly while a mostly static page takes much longer. We can combine this with how valuable the page is and what it costs to crawl to estimate how worthwhile another crawl is at any point in time:
+
+$$
+\text{refresh score}(u)
+=
+\frac{
+V_u\left(1-e^{-\lambda_g \Delta t_u}\right)
+}{
+C_u
+}
+$$
+
+Here $V_u$ is the value of detecting a meaningful change on the page, $\Delta t_u$ is the time since its last successful crawl and $C_u$ is its expected crawl cost. The score keeps increasing as the page becomes more likely to have changed and lets the Scheduler compare it against other pages waiting to be refreshed. It doesn't give us an exact crawl date since that also depends on how much capacity is available and what else is waiting.
+
+Every unchanged crawl lowers our estimate of $\lambda_g$ while a meaningful change raises it. The Poisson assumption obviously isn't going to hold everywhere since pages can change on schedules or in bursts, but it feels like a reasonable place to start.
+
+The second question is separate from this score. Sometimes, two pages belonging to the same path may need to be crawled at different cadences even if they have the same learnt change rate because one of them has a business SLA. Let $S_u$ be the longest we're allowed to go without checking page $u$. Its next deadline is simply:
+
+$$
+d_u = t_u^{\text{last}} + S_u
+$$
+
+Here $t_u^{\text{last}}$ means the last successful check; a failed crawl shouldn't reset the SLA clock. A page without an SLA has no such deadline and competes for capacity using its refresh score. For a page with an SLA, the refresh score may get it crawled earlier but it can't be allowed to miss $d_u$. This is another usecase for overlapping groups: a page can inherit its change behaviour from one group while inheriting a stricter crawl SLA from another. If the fetch succeeds and the change is still visible, we'll catch it within the SLA window, though we won't know exactly when it happened between the two crawls.
+
+> How should limited crawl capacity be divided?
+
+Say our crawler has $B$ units of crawl capacity over the next hour. We first have to reserve enough of it for pages approaching their SLA or coverage deadline; these pages shouldn't have to compete with refresh scores. The rest can go towards pages we already think are valuable and exploring things we know very little about. A fixed split like 70% refresh and 30% discovery is pretty easy to operate but probably leaves a lot on the table.
+
+I don't think we should allocate this capacity to individual URLs directly either. This is where the groups from above become useful. If thousands of Crunchbase `/company/*` pages have similar value, cost and refresh behaviour, the scheduler can allocate capacity to that group and let the frontier choose the concrete URLs.
+
+For every group $g$, the scheduler has to estimate two things: what we'd get from spending one more request on it and what that request would cost. Let's call them $\Delta U_g(x_g)$ and $C_g$ respectively, where $x_g$ is the number of crawls the group has already received in this window. $\Delta U_g(x_g)$ could mean fresher information, something missing from our index or a path into a useful part of the web. At its simplest, the scheduler could prefer whichever eligible group currently has the highest marginal value per unit cost:
+
+$$
+\text{score}(g,x_g) = \frac{\Delta U_g(x_g)}{C_g}
+$$
+
+The word _marginal_ matters a lot here. Crawling the first hundred pages from a useful path may teach us a lot; the next million may mostly repeat what we already have. The reward should therefore measure new information or meaningful change rather than successful requests.
+
+But always picking the group with the best known score means we'd barely try anything new. An [AUER](https://www.cs.cornell.edu/~rdk/papers/colt08.pdf)-inspired [sleeping-bandit](https://mlanthology.org/colt/2008/kleinberg2008colt-regret/) score can account for how uncertain we are:
+
+$$
+\text{score}_t(g,x_g) =
+\frac{
+    \widehat{\Delta U}_g(x_g)
+    + \alpha\sqrt{\frac{\log t}{N_g + 1}}
+}{
+    \widehat{C}_g
+}
+$$
+
+$\widehat{\Delta U}_g(x_g)$ is what previous crawls from the group suggest the next request would return, $N_g$ is how often we've tried it and $t$ is the total number of allocation decisions made so far. But to make sense of this, we'd need to normalize these rewards onto a common scale for the exploration term. The second term is our lever in occasionally testing groups we don't know enough about. As we crawl them, that uncertainty falls and their actual usefulness starts deciding how much capacity they receive.
+
+Each group behaves like an action but it is only awake while it has eligible work: URLs waiting to be discovered, pages waiting to be refreshed and enough room under the host's politeness limit. Dividing the whole score by $\widehat{C}_g$ is our cost-aware extension to AUER; it means expensive groups receive less exploration unless their potential value makes up for it. We'd need to validate that choice instead of assuming it is always the right tradeoff.
+
+We also don't need to continuously rank every URL against every other URL. We can learn at the level where outcomes repeat, allocate capacity there and let the frontier choose a concrete URL from the winning group. There are some hard constraints around this, pages with SLA or coverage deadlines need minimum capacity reserved for them and politeness puts an upper bound on how much capacity a host can actually consume:
+
+$$
+\max_{x_1,\ldots,x_n}\sum_g U_g(x_g)
+\qquad
+\text{subject to}
+\qquad
+\sum_g C_gx_g \le B,
+\quad
+L_g \le x_g \le H_g,
+\quad
+x_g \in \mathbb{Z}_{\ge 0}
+$$
+
+Here $U_g(x_g)$ is the total utility from allocating $x_g$ crawls to group $g$, $L_g$ is the minimum number of crawls required by SLA or coverage deadlines, and $H_g$ is the maximum currently allowed by politeness and available work. These bounds are a simplification since real host/proxy/session limits can be shared across multiple groups. We'd also need to check that $\sum_g C_gL_g \le B$ before trying to produce a schedule; otherwise the promised work doesn't fit into the available capacity.
+
+We don't necessarily have to solve this enormous optimization problem exactly. Repeatedly choosing the eligible group with the best estimated marginal return is already a reasonable online approximation IMO. We'd still need a small amount of random exploration and a coverage deadline for low-scoring groups, otherwise the Scheduler can keep reinforcing its own choices and some URLs may never be crawled again. I'll report a few simulated runs on this in a different blog post.
+
+> How do we make these decisions across billions of URLs?
+
+Probably the hardest question so far. Keeping track of all these states and cadences on a 1 trillion URL catalog (assumption) is pretty demanding cause this system essentially powers the frontier. We can't rank all 1T URLs every few hours, and we probably shouldn't promise to crawl every one of them once a year either. If we did, that alone would require:
+
+$$
+\frac{1\text{ trillion URLs}}{365}
+\approx 2.74\text{ billion refreshes/day}
+$$
+
+That's already 27-55% of a crawler doing 5-10B pages/day before accounting for discovery, stricter freshness SLAs, retries or pages which actually need to be refreshed often.
+
+The catalog therefore needs some idea of active and dormant URLs. Pages with SLAs, recent changes, search demand or useful crawl history remain active. Persistent duplicates, spam, dead pages and pages which haven't meaningfully changed across several crawls can become dormant and stop receiving a refresh guarantee.
+
+Dormant doesn't have to mean forgotten forever. We can keep a small sampling budget for dormant groups and reactivate them if their behaviour changes or new links/search demand make them useful again. But spending 2.74B requests every day just to prove that mostly useless pages are still useless probably isn't a good use of the crawler.
+
+I think three services around the crawler are enough to make this work:
+
+**The Scheduler:** This is where the capacity allocation from the previous question actually happens. For a given scheduling window (say the next hour), it first reserves enough capacity for pages nearing their SLA or coverage deadline. It then divides whatever remains between the eligible groups using the value, cost, uncertainty and refresh scores we worked out above.
+
+It obviously can't find those groups by scanning the entire URL catalog every hour. URLs would have to be partitioned into coarse buckets using their SLA/coverage deadlines and time since the last crawl, with summaries maintained for each group. The Scheduler only reads the buckets relevant to that window + group summaries and produces something like: group $g$ gets $x_g$ crawls over the next hour.
+
+**The Frontier Manager:** This reads URL groups/candidates + how much crawl capacity each should receive from the Scheduler and uses them to keep the frontier queues populated to a decent size. While refilling the frontier, it follows the capacity split decided by the Scheduler. Crawlers only claim leased work from the frontier and report the outcome; they don't need to know how or why that work was selected.
+
+**The Admission Service:** This reads your politeness state, historical outcomes and proxy/session/identity health (+whatever fingerprinting/anti-bot tech we choose to introduce). The sole responsibility of this service is to answer whether a given claimed URL can run now or not and what resources it should use. Since this essentially acts as a feedback control agent, the worker reports the result to the Admission Service so it can update the relevant states. We haven't dug too deep into this cause politeness and the systems around it are out of scope for this blog.
+
+### What I don't want to cover
+
+I've intentionally skipped most of what happens inside a crawl sequence. Getting this path working is the easy part; keeping it cheap at scale is not. `wreq` + `lol_html` on Rust gets fetching and parsing decently far. Buffering Parquet files on disk before flushing them to S3 and using `minhash` / `simhash` for standard dedup are reasonable starting points too. They have their own problems at scale but those aren't the problems I wanted to explore here.
+
+### What's next?
+
+I kinda wanted to cover adaptive politeness, diagnosing why requests fail and using that feedback to choose the right rate/resources for the next request but this blog is already prose heavy and will likely move it to the next one.
+
+This blog also doesn't evaluate whether the scheduling ideas above actually work. I'm aiming to cover that next by simulating a few policies and comparing what they crawl, what they miss and how much they cost.
+
+### Closing notes
+
+> Not everyone can build a good crawler.
+
+I've been working in this space for some time now and useful data has only become harder to access reliably. People who can acquire it well and turn it into something useful will make bank (+1).
+
+If this interests you and you have unique thoughts on making these systems better, feel free to reach out :)
