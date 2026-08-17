@@ -169,14 +169,16 @@ I've intentionally skipped most of what happens inside a crawl sequence. Getting
 
 ### What's next?
 
-I kinda wanted to cover adaptive politeness, diagnosing why requests fail and using that feedback to choose the right rate/resources for the next request but this blog is already prose heavy and will likely move it to the next one.
+I kinda wanted to to introduce what I think on politeness (and how it can adapt overtime), diagonising failures (essentially leading the way to auto-healing crawlers, optimal resource management) but I'll move all of this to the next one in this series; this blog is already prose heavy.
 
-This blog also doesn't evaluate whether the scheduling ideas above actually work. I'm aiming to cover that next by simulating a few policies and comparing what they crawl, what they miss and how much they cost.
+Ideally we'd also like to cover if our learning cycles in our Scheduler service (and Admission later) learn whether its decisions were any good or not; will cover it down the line.
 
 ### Closing notes
 
 > Not everyone can build a good crawler.
 
-I've been working in this space for some time now and useful data has only become harder to access reliably. People who can acquire it well and turn it into something useful will make bank (+1).
+Useful data has only become harder to access reliably and people who can acquire it well and turn it into something useful will make bank (+1).
 
 If this interests you and you have unique thoughts on making these systems better, feel free to reach out :)
+
+P.S. I've cut down a bunch of complexity in representing variables and how we learn from them on purpose. There's a slight chance the math may not add up, do let me know if so!
