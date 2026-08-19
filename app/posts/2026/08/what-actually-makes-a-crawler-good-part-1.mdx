@@ -48,7 +48,7 @@ Kinda depends on whether this is the first URL we've ever seen from a host or ju
 - A junk page can still be ranked decently if enough junk pages add to its authority. If an authoritative page links into that network, some of its score can flow through the rest of it.
 - You don't really validate whether these junk pages are related. A layer of fingerprinting on WHOIS details + same IP / hosting block / ASN can give us more context, though shared hosting and CDNs mean these signals aren't proof on their own.
 
-On the other hand, we know a lot more if the host has already been crawled to some extent. Say we've never seen a particular Crunchbase URL but have crawled thousands of other `/company/*` pages == crawler has some idea of what that path usually contains, how often those pages are useful, what they cost to fetch and whether they tend to produce more useful links.
+On the other hand, we know a lot more if the host has already been crawled to some extent. Say we've never seen a particular Yelp URL but have crawled thousands of other `/biz/*` pages == crawler has some idea of what that path usually contains, how often those pages are useful, what they cost to fetch and whether they tend to produce more useful links.
 
 We're defining a set of URLs which we expect to behave similarly as a group $g$. A group could be based on the URL path, the sitemap it came from, where its links appear within a website, or the type of entity it represents. A new URL can start with what we know about its group and develop its own history later. In a real system, a URL may belong to several overlapping groups; we'll use one group at a time in the math below even though rules from several groups can apply to the same URL.
 
@@ -58,7 +58,7 @@ A nice question on top of this: How do we learn whether an uncertain group is ac
 
 This splits into two questions: Based on what we've learnt from previous crawls, when should we check the page again? And how long are we allowed to go without checking it? A bad page can change on every request because of ads or recommendations which add nothing to our index. On the other hand, a company page may change rarely but the change itself could be important enough that we'd still want to check it often.
 
-A fairly simple starting point would be to learn refresh cadence at the path level. A new Crunchbase `/company/*` page inherits what we know about similar company pages; if it keeps changing meaningfully, pull its next crawl closer and if it remains unchanged across multiple crawls, keep pushing it out.
+A fairly simple starting point would be to learn refresh cadence at the path level. A new Yelp `/biz/*` page inherits what we know about similar business pages; if it keeps changing meaningfully, pull its next crawl closer and if it remains unchanged across multiple crawls, keep pushing it out.
 
 We can put some simple math around this: Say meaningful changes within a group happen at an estimated rate $\lambda_g$. If we start by assuming these changes follow a Poisson process, the probability that at least one meaningful change happened while we waited $\Delta t$ is:
 
@@ -94,7 +94,7 @@ Here $t_u^{\text{last}}$ means the last successful check; a failed crawl shouldn
 
 Say our crawler has $B$ units of crawl capacity over the next hour. We first have to reserve enough of it for pages approaching their SLA or coverage deadline; these pages shouldn't have to compete with refresh scores. The rest can go towards pages we already think are valuable and exploring things we know very little about. A fixed split like 70% refresh and 30% discovery is pretty easy to operate but probably leaves a lot on the table.
 
-I don't think we should allocate this capacity to individual URLs directly either. This is where the groups from above become useful. If thousands of Crunchbase `/company/*` pages have similar value, cost and refresh behaviour, the scheduler can allocate capacity to that group and let the frontier choose the concrete URLs.
+I don't think we should allocate this capacity to individual URLs directly either. This is where the groups from above become useful. If thousands of Yelp `/biz/*` pages have similar value, cost and refresh behaviour, the scheduler can allocate capacity to that group and let the frontier choose the concrete URLs.
 
 For every group $g$, the scheduler has to estimate two things: what we'd get from spending one more request on it and what that request would cost. Let's call them $\Delta U_g(x_g)$ and $C_g$ respectively, where $x_g$ is the number of crawls the group has already received in this window. $\Delta U_g(x_g)$ could mean fresher information, something missing from our index or a path into a useful part of the web. At its simplest, the scheduler could prefer whichever eligible group currently has the highest marginal value per unit cost:
 
